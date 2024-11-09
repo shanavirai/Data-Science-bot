@@ -2,50 +2,94 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from openai import OpenAI
+
+# Initialize OpenAI client using Streamlit's secrets
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # Title of the app
-st.title("Advanced EDA Tool for Data Science Professionals")
+st.title("Advanced EDA Bot - Data Science Assistant")
 
-# Brief description of the tool
-st.write("""
-This app allows you to upload a CSV file and perform advanced Exploratory Data Analysis (EDA).
-You can explore various aspects of the dataset, including summaries, visualizations, and more!
-""")
+# Brief description
+st.write("Welcome to the Advanced EDA Bot. Upload a CSV file, and I will help you perform Exploratory Data Analysis (EDA) and visualize your data.")
 
 # Accept CSV file upload
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
+# Initialize session state for chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Function to get a response from OpenAI with EDA-specific context
+def get_response(prompt, df=None):
+    # Custom system message for EDA assistant behavior
+    system_message = {
+        "role": "system",
+        "content": ("You are an advanced data science assistant with expertise in performing Exploratory Data Analysis (EDA). "
+                    "You help users analyze datasets, summarize the data, generate visualizations (like histograms, scatter plots, etc.), "
+                    "and assist with data cleaning, missing value handling, and more. You can process data, offer suggestions, and provide insights.")
+    }
+
+    # Send the conversation history along with the system message for more context
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            system_message
+        ] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] +
+        [{"role": "user", "content": prompt}]
+    )
+    # Access the content directly as an attribute
+    return response.choices[0].message.content
+
+# Process and display response if there's input
 if uploaded_file:
     # Read the uploaded CSV file into a Pandas DataFrame
     df = pd.read_csv(uploaded_file)
-
-    # Display the dataframe
+    
+    # Show dataset overview and summary statistics
     st.subheader("Dataset Overview")
     st.write(df.head())  # Show first few rows of the dataset
-    
-    # Show dataset dimensions
     st.write(f"Dataset Shape: {df.shape[0]} rows, {df.shape[1]} columns")
+    
+    # Ask the assistant for an EDA task
+    user_input = st.chat_input("What EDA task would you like to perform? (e.g., summary statistics, correlation, visualize distribution, etc.)")
 
-    # Show summary statistics
-    st.subheader("Summary Statistics")
-    st.write(df.describe())
+    if user_input:
+        # Append user's message
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        
+        # Get response from GPT assistant (for EDA tasks)
+        assistant_response = get_response(user_input, df)
+        st.session_state.messages.append({"role": "assistant", "content": assistant_response})
 
-    # Show column types
+        with st.chat_message("assistant"):
+            st.markdown(assistant_response)
+
+    # Perform basic EDA
+    st.subheader("Basic Exploratory Data Analysis")
+
+    # Summary statistics
+    if st.checkbox("Show Summary Statistics"):
+        st.write(df.describe())
+
+    # Show data types
     st.subheader("Data Types of Columns")
     st.write(df.dtypes)
 
-    # Show missing values
+    # Check for missing values
     st.subheader("Missing Values")
     st.write(df.isnull().sum())
 
-    # Show correlations
+    # Correlation Heatmap
     st.subheader("Correlation Heatmap")
     corr_matrix = df.corr()
     plt.figure(figsize=(10, 6))
     sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
     st.pyplot(plt)
 
-    # Show distribution of numeric columns
+    # Visualize distributions of numeric columns
     st.subheader("Distribution of Numeric Columns")
     numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns
     for column in numeric_columns:
@@ -56,7 +100,7 @@ if uploaded_file:
         ax.set_ylabel('Frequency')
         st.pyplot(fig)
 
-    # Pairplot (if the dataset is small)
+    # Pairplot for visualizing relationships (only if dataset is small)
     if len(df) <= 1000:  # Limiting the size for performance reasons
         st.subheader("Pairplot of the Dataset")
         sns.pairplot(df)
@@ -69,19 +113,6 @@ if uploaded_file:
         sns.boxplot(x=df[column], ax=ax, color='orange')
         ax.set_title(f'Boxplot of {column}')
         st.pyplot(fig)
-
-    # Correlation matrix (pairwise) for specific features
-    feature_select = st.multiselect("Select features to analyze correlation", df.columns.tolist())
-    if feature_select:
-        st.subheader("Correlation of Selected Features")
-        selected_corr = df[feature_select].corr()
-        st.write(selected_corr)
-
-    # Pairwise plot for selected features
-    if len(feature_select) > 1:
-        st.subheader("Pairplot of Selected Features")
-        sns.pairplot(df[feature_select])
-        st.pyplot(plt)
 
     # Data Cleaning options
     st.subheader("Data Cleaning Options")
@@ -105,4 +136,3 @@ if uploaded_file:
 
 else:
     st.write("Please upload a CSV file to begin the EDA.")
-

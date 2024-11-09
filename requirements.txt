@@ -1,2 +1,5 @@
-streamlit
-openai
+openai==0.27.0
+streamlit==1.21.0
+matplotlib==3.7.1
+seaborn==0.11.2
+pandas==1.5.2

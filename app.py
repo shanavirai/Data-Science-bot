@@ -17,13 +17,23 @@ st.write("Welcome to the Advanced EDA Bot. Upload a CSV file, and I will help yo
 # Accept CSV file upload
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
-# Function to detect delimiter using csv.Sniffer
+# Function to detect delimiter using a fallback mechanism
 def detect_delimiter(file):
-    # Read the first 1024 bytes of the file to detect the delimiter
-    sample = file.read(1024).decode('utf-8', errors='ignore')
-    sniffer = csv.Sniffer()
-    delimiter = sniffer.sniff(sample).delimiter
-    return delimiter
+    # Try common delimiters
+    possible_delimiters = [',', '\t', ';', ' ']
+    
+    # Try reading the file with each delimiter
+    for delimiter in possible_delimiters:
+        try:
+            file.seek(0)  # Reset file pointer
+            df = pd.read_csv(file, delimiter=delimiter)
+            # Check if dataframe has more than one column to confirm successful read
+            if df.shape[1] > 1:
+                return delimiter
+        except Exception as e:
+            continue
+    # If no delimiter works, raise an error
+    raise ValueError("Could not determine the delimiter. Please check the file format.")
 
 # Initialize session state for chat history
 if "messages" not in st.session_state:
@@ -48,13 +58,17 @@ def get_response(prompt, df=None):
 # Process and display response if there's input
 if uploaded_file:
     # Detect the delimiter
-    delimiter = detect_delimiter(uploaded_file)
-    
-    # Reset file pointer after reading for delimiter detection
-    uploaded_file.seek(0)
-    
-    # Read the uploaded CSV file into a Pandas DataFrame using the detected delimiter
-    df = pd.read_csv(uploaded_file, delimiter=delimiter)
+    try:
+        delimiter = detect_delimiter(uploaded_file)
+        # Reset file pointer after reading for delimiter detection
+        uploaded_file.seek(0)
+        
+        # Read the uploaded CSV file into a Pandas DataFrame using the detected delimiter
+        df = pd.read_csv(uploaded_file, delimiter=delimiter)
+        
+    except Exception as e:
+        st.error(f"Error detecting delimiter: {e}")
+        st.stop()
     
     # Show dataset overview and summary statistics
     st.subheader("Dataset Overview")

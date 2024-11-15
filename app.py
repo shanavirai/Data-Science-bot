@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import csv
 from openai import OpenAI
 
 # Initialize OpenAI client using Streamlit's secrets
@@ -16,13 +17,20 @@ st.write("Welcome to the Advanced EDA Bot. Upload a CSV file, and I will help yo
 # Accept CSV file upload
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
+# Function to detect delimiter using csv.Sniffer
+def detect_delimiter(file):
+    # Read the first 1024 bytes of the file to detect the delimiter
+    sample = file.read(1024).decode('utf-8', errors='ignore')
+    sniffer = csv.Sniffer()
+    delimiter = sniffer.sniff(sample).delimiter
+    return delimiter
+
 # Initialize session state for chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Function to get a response from OpenAI with EDA-specific context
 def get_response(prompt, df=None):
-    # Custom system message for EDA assistant behavior
     system_message = {
         "role": "system",
         "content": ("You are an advanced data science assistant with expertise in performing Exploratory Data Analysis (EDA). "
@@ -30,19 +38,23 @@ def get_response(prompt, df=None):
                     "and assist with data cleaning, missing value handling, and more. You can process data, offer suggestions, and provide insights.")
     }
 
-    # Send the conversation history along with the system message for more context
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[system_message] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] +
         [{"role": "user", "content": prompt}]
     )
-    # Access the content directly as an attribute
     return response.choices[0].message.content
 
 # Process and display response if there's input
 if uploaded_file:
-    # Read the uploaded CSV file into a Pandas DataFrame
-    df = pd.read_csv(uploaded_file)
+    # Detect the delimiter
+    delimiter = detect_delimiter(uploaded_file)
+    
+    # Reset file pointer after reading for delimiter detection
+    uploaded_file.seek(0)
+    
+    # Read the uploaded CSV file into a Pandas DataFrame using the detected delimiter
+    df = pd.read_csv(uploaded_file, delimiter=delimiter)
     
     # Show dataset overview and summary statistics
     st.subheader("Dataset Overview")

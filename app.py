@@ -33,9 +33,7 @@ def get_response(prompt, df=None):
     # Send the conversation history along with the system message for more context
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[
-            system_message
-        ] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] +
+        messages=[system_message] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] +
         [{"role": "user", "content": prompt}]
     )
     # Access the content directly as an attribute
@@ -72,7 +70,7 @@ if uploaded_file:
 
     # Summary statistics
     if st.checkbox("Show Summary Statistics"):
-        st.write(df.describe())
+        st.write(df.describe(include="all"))  # Include all columns for summary
 
     # Show data types
     st.subheader("Data Types of Columns")
@@ -82,12 +80,16 @@ if uploaded_file:
     st.subheader("Missing Values")
     st.write(df.isnull().sum())
 
-    # Correlation Heatmap
+    # Correlation Heatmap (only for numeric columns)
     st.subheader("Correlation Heatmap")
-    corr_matrix = df.corr()
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
-    st.pyplot(plt)
+    numeric_df = df.select_dtypes(include=['float64', 'int64'])
+    if not numeric_df.empty:
+        corr_matrix = numeric_df.corr()
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
+        st.pyplot(plt)
+    else:
+        st.write("No numeric columns available for correlation.")
 
     # Visualize distributions of numeric columns
     st.subheader("Distribution of Numeric Columns")
@@ -125,13 +127,16 @@ if uploaded_file:
     
     # Fill missing values with median or mean for numeric columns
     if st.checkbox("Fill missing numeric values with median"):
-        df_filled = df.fillna(df.median())
+        df_filled = df.copy()  # Make a copy to avoid modifying the original df
+        numeric_columns = df_filled.select_dtypes(include=['float64', 'int64']).columns
+        for column in numeric_columns:
+            df_filled[column].fillna(df_filled[column].median(), inplace=True)
         st.write(f"Filled Data Shape: {df_filled.shape[0]} rows, {df_filled.shape[1]} columns")
         st.write(df_filled.head())
 
     # Provide the option to download the cleaned data
     if st.button("Download Cleaned Data"):
-        cleaned_csv = df_cleaned.to_csv(index=False)
+        cleaned_csv = df_filled.to_csv(index=False)
         st.download_button(label="Download CSV", data=cleaned_csv, file_name="cleaned_data.csv", mime="text/csv")
 
 else:
